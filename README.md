@@ -41,6 +41,26 @@ Keep a file called `docs/ai-log.md`. For every important prompt, write:
 
 You will add at least one entry in every build. It counts toward your grade.
 
+## The nine Build classes
+
+The capstone is built in nine Build classes, one milestone each. Every class follows the same four steps: a short gap lesson, prompt and build, review, ship. The full list of what each class delivers and when it is done is in [docs/milestones.md](docs/milestones.md).
+
+| Build | Class | You deliver | New ideas taught first |
+| --- | --- | --- | --- |
+| 1 | Domain core in the terminal | Events, ticket tiers, bookings with a capacity rule, a first-in-first-out waitlist, fast lookup by reference | Running Node, modules, `Map`, classes, errors, money as whole cents, Big O |
+| 2 | Search, sorting and the first tests | Search, filter and sort events with your own merge sort, the backlog as user stories, the first automated tests | `node:test`, pure functions, comparators, stability, user stories and acceptance criteria |
+| 3 | Architecture, state machine and server skeleton | A layered design, the booking life cycle as a state machine, a web server with `/health` and static files | HTTP requests and responses, status codes, routers, state machines, diagrams |
+| 4 | A working REST API (in memory) | Create, publish, search, book, pay (mock) and cancel through an API | `async`/`await`, dependency injection, repositories, REST design |
+| 5 | SQLite and the overselling fix | Data in SQLite, and the last-ticket problem reproduced and then fixed | SQL, atomic updates, constraints, parameterised queries, concurrency |
+| 6 | Frontend on mock data | Browse, filter, view an event, choose tickets, check out with a countdown, mock card payment | The DOM, forms, ES modules in the browser, accessibility basics |
+| 7 | Login, roles and a connected app | Signup and login, three roles, private data, the website talking to the real API | `fetch`, password hashing, tokens, authentication versus authorization |
+| 8 | Refunds, waitlist, expiry and a real test suite | A refund policy, cancelling, waitlist offers with a time limit, unpaid bookings that expire, a debugging exercise | A controllable clock in tests, boundary cases, testing concurrency, debugging method, scheduled jobs |
+| 9 | QR check-in, CI and security | Signed QR tickets, staff check-in, forged and repeated scans rejected, security headers, rate limiting, tests on every push, a demo-ready project | Signing versus encrypting, GitHub Actions, security headers, secrets |
+
+The three hard problems arrive where you would expect: overselling in Build 5, and refunds and waitlists in Build 8.
+
+For every Build class, work on a branch named `build-N` (for example `build-2`), open a pull request into `main`, and merge it.
+
 ## Stack
 
 - **Frontend:** HTML, CSS, JavaScript (no framework)
