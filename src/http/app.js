@@ -3,7 +3,12 @@ import { realpath, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { DomainError } from '../domain/errors.js';
+import { MockPaymentGateway } from '../lib/mockPaymentGateway.js';
+import { MemoryRepository } from '../repositories/memory.js';
+import { BookingService } from '../services/bookingService.js';
+import { EventService } from '../services/eventService.js';
 import { Router } from './router.js';
 
 const DEFAULT_PUBLIC_DIRECTORY = fileURLToPath(new URL('../../public/', import.meta.url));
@@ -31,12 +36,11 @@ function sendError(response, status, code, message) {
 }
 
 async function readJsonBody(request) {
-  const contentType = request.headers['content-type']?.split(';', 1)[0].trim().toLowerCase();
-  if (contentType !== 'application/json') return undefined;
-
   let text = '';
-  for await (const chunk of request) text += chunk;
-  if (!text) return undefined;
+  for await (const chunk of request) {
+    text += chunk;
+  }
+  if (!text.trim()) return {};
 
   try {
     return JSON.parse(text);
@@ -102,15 +106,99 @@ async function servePublicFile(response, pathname, publicDirectory, method) {
   }
 }
 
-export function createAppServer({ router = new Router(), publicDirectory = DEFAULT_PUBLIC_DIRECTORY } = {}) {
+export function createAppServer({
+  router = new Router(),
+  publicDirectory = DEFAULT_PUBLIC_DIRECTORY,
+  repository = new MemoryRepository(),
+  paymentGateway = new MockPaymentGateway(),
+} = {}) {
+  const eventService = new EventService(repository);
+  const bookingService = new BookingService(repository, paymentGateway);
+
   if (!router.match('GET', '/health')) {
     router.get('/health', () => ({ status: 200, body: { status: 'ok' } }));
   }
+
+  // --- BUILD 4 REST API ROUTES ---
+
+  router.post('/api/events', async (ctx) => {
+    const body = ctx?.body ?? {};
+    const event = await eventService.createEvent(body);
+    return { status: 201, body: { data: event } };
+  });
+
+  router.post('/api/events/:id/tiers', async (ctx) => {
+    const params = ctx?.params ?? {};
+    const body = ctx?.body ?? {};
+    const tier = await eventService.addTier(params.id, body);
+    return { status: 201, body: { data: tier } };
+  });
+
+  router.post('/api/events/:id/publish', async (ctx) => {
+    const params = ctx?.params ?? {};
+    const event = await eventService.publishEvent(params.id);
+    return { status: 200, body: { data: event } };
+  });
+
+  router.get('/api/events', async ({ request }) => {
+    const url = new URL(request.url, 'http://localhost');
+    const qParams = url.searchParams;
+
+    const maxPrice = qParams.get('maxPrice');
+    const criteria = {
+      q: qParams.get('q') || undefined,
+      city: qParams.get('city') || undefined,
+      from: qParams.get('from') || undefined,
+      to: qParams.get('to') || undefined,
+      maxPriceCents: maxPrice ? Number.parseInt(maxPrice, 10) : undefined,
+      onlyAvailable: qParams.get('includeSoldOut') === 'false',
+    };
+
+    const sortBy = qParams.get('sort') || 'date';
+    const events = await eventService.searchEvents(criteria, sortBy);
+
+    return { status: 200, body: { data: events } };
+  });
+
+  router.post('/api/bookings', async (ctx) => {
+    const request = ctx?.request;
+    const body = ctx?.body ?? {};
+    const userId = request?.headers?.['x-user-id'] || body.userId || 'anonymous';
+    const booking = await bookingService.bookTickets({ ...body, userId });
+    return { status: 201, body: { data: booking } };
+  });
+
+  router.post('/api/bookings/:reference/pay', async (ctx) => {
+    const request = ctx?.request;
+    const params = ctx?.params ?? {};
+    const body = ctx?.body ?? {};
+    const userId = request?.headers?.['x-user-id'] || body.userId || 'anonymous';
+    const booking = await bookingService.payBooking({
+      reference: params.reference,
+      userId,
+      card: body.card,
+      shouldFail: body.shouldFail ?? false,
+    });
+    return { status: 200, body: { data: booking } };
+  });
+
+  router.post('/api/bookings/:reference/cancel', async (ctx) => {
+    const request = ctx?.request;
+    const params = ctx?.params ?? {};
+    const body = ctx?.body ?? {};
+    const userId = request?.headers?.['x-user-id'] || body.userId || 'anonymous';
+    const booking = await bookingService.cancelBooking({
+      reference: params.reference,
+      userId,
+    });
+    return { status: 200, body: { data: booking } };
+  });
 
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://localhost');
       const route = router.match(request.method ?? 'GET', url.pathname);
+      
       const body = await readJsonBody(request);
 
       if (route) {
